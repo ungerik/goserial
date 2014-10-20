@@ -51,6 +51,8 @@ func openPort(name string, c *Config) (rwc io.ReadWriteCloser, err error) {
 		speed = C.B19200
 	case 9600:
 		speed = C.B9600
+	case 4800:
+		speed = C.B4800
 	default:
 		return nil, fmt.Errorf("Unknown baud rate %v", c.Baud)
 	}
