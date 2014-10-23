@@ -1,6 +1,6 @@
 // +build linux,!cgo
 
-package serial
+package goserial
 
 import (
 	"io"
