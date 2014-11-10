@@ -34,7 +34,7 @@ func openPort(name string, c *Config) (rwc io.ReadWriteCloser, err error) {
 		return
 	}
 
-	var stop ByteSize
+	var stop byte
 	switch c.StopBits {
 	case StopBits1:
 		stop = 0
@@ -44,7 +44,7 @@ func openPort(name string, c *Config) (rwc io.ReadWriteCloser, err error) {
 		panic(c.StopBits)
 	}
 
-	var size ByteSize
+	var size byte
 	switch c.Size {
 	case Byte5:
 		size = syscall.CS5
@@ -62,7 +62,7 @@ func openPort(name string, c *Config) (rwc io.ReadWriteCloser, err error) {
 		return
 	}
 
-	var parity ParityMode
+	var parity byte
 	switch c.Parity {
 	case ParityNone:
 		parity = 0
