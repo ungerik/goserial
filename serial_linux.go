@@ -67,9 +67,9 @@ func openPort(name string, c *Config) (rwc io.ReadWriteCloser, err error) {
 	case ParityNone:
 		parity = 0
 	case ParityEven:
-		parity = syscall.PARENB // 1
+		parity = 2
 	case ParityOdd:
-		parity = syscall.PARODD // 2
+		parity = 1
 	default:
 		panic(c.Parity)
 	}
