@@ -34,6 +34,46 @@ func openPort(name string, c *Config) (rwc io.ReadWriteCloser, err error) {
 		return
 	}
 
+	var stop ByteSize
+	switch c.StopBits {
+	case StopBits1:
+		stop = 0
+	case StopBits2:
+		stop = syscall.CSTOPB
+	default:
+		panic(c.StopBits)
+	}
+
+	var size ByteSize
+	switch c.Size {
+	case Byte5:
+		size = syscall.CS5
+	case Byte6:
+		size = syscall.CS6
+	case Byte7:
+		size = syscall.CS7
+	case Byte8:
+		size = syscall.CS8
+	default:
+		panic(c.Size)
+	}
+
+	if size == 0 {
+		return
+	}
+
+	var parity ParityMode
+	switch c.Parity {
+	case ParityNone:
+		parity = 0
+	case ParityEven:
+		parity = syscall.PARENB // 1
+	case ParityOdd:
+		parity = syscall.PARODD // 2
+	default:
+		panic(c.Parity)
+	}
+
 	f, err := os.OpenFile(name, syscall.O_RDWR|syscall.O_NOCTTY|syscall.O_NONBLOCK, 0666)
 	if err != nil {
 		return nil, err
@@ -48,7 +88,7 @@ func openPort(name string, c *Config) (rwc io.ReadWriteCloser, err error) {
 	fd := f.Fd()
 	t := syscall.Termios{
 		Iflag:  syscall.IGNPAR,
-		Cflag:  syscall.CS8 | syscall.CREAD | syscall.CLOCAL | rate,
+		Cflag:  stop | size | parity | syscall.CREAD | syscall.CLOCAL | rate,
 		Cc:     [32]uint8{syscall.VMIN: 1},
 		Ispeed: rate,
 		Ospeed: rate,
