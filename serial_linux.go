@@ -89,11 +89,13 @@ func openPort(name string, c *Config) (rwc io.ReadWriteCloser, err error) {
 		0,
 	)
 	if errno != 0 {
+		f.Close()
 		return nil, errno
 	}
 
 	err = syscall.SetNonblock(int(f.Fd()), false)
 	if err != nil {
+		f.Close()
 		return nil, err
 	}
 
