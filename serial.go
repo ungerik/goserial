@@ -130,7 +130,7 @@ func (c *Config) check() error {
 	switch c.StopBits {
 	case StopBits1, StopBits2:
 	default:
-		return ErrConfigParity
+		return ErrConfigStopBits
 	}
 
 	switch c.Parity {
