@@ -30,10 +30,6 @@ func openPort(name string, c *Config) (rwc io.ReadWriteCloser, err error) {
 		return nil, fmt.Errorf("Unknown baud rate %v", c.Baud)
 	}
 
-	if rate == 0 {
-		return
-	}
-
 	var stop uint32
 	switch c.StopBits {
 	case StopBits1:
@@ -41,7 +37,7 @@ func openPort(name string, c *Config) (rwc io.ReadWriteCloser, err error) {
 	case StopBits2:
 		stop = syscall.CSTOPB
 	default:
-		panic(c.StopBits)
+		panic("should not happen if Config.check() was called before")
 	}
 
 	var size uint32
@@ -55,11 +51,7 @@ func openPort(name string, c *Config) (rwc io.ReadWriteCloser, err error) {
 	case Byte8:
 		size = syscall.CS8
 	default:
-		panic(c.Size)
-	}
-
-	if size == 0 {
-		return
+		panic("should not happen if Config.check() was called before")
 	}
 
 	var parity uint32
@@ -71,7 +63,7 @@ func openPort(name string, c *Config) (rwc io.ReadWriteCloser, err error) {
 	case ParityOdd:
 		parity = 1
 	default:
-		panic(c.Parity)
+		panic("should not happen if Config.check() was called before")
 	}
 
 	f, err := os.OpenFile(name, syscall.O_RDWR|syscall.O_NOCTTY|syscall.O_NONBLOCK, 0666)
