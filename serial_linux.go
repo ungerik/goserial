@@ -66,18 +66,11 @@ func openPort(name string, c *Config) (rwc io.ReadWriteCloser, err error) {
 		panic("should not happen if Config.check() was called before")
 	}
 
-	f, err := os.OpenFile(name, syscall.O_RDWR|syscall.O_NOCTTY|syscall.O_NONBLOCK, 0666)
+	f, err := os.OpenFile(name, syscall.O_RDWR|syscall.O_NOCTTY|syscall.O_NONBLOCK, 0600)
 	if err != nil {
 		return nil, err
 	}
 
-	defer func() {
-		if err != nil && f != nil {
-			f.Close()
-		}
-	}()
-
-	fd := f.Fd()
 	t := syscall.Termios{
 		Iflag:  syscall.IGNPAR,
 		Cflag:  stop | size | parity | syscall.CREAD | syscall.CLOCAL | rate,
@@ -86,20 +79,22 @@ func openPort(name string, c *Config) (rwc io.ReadWriteCloser, err error) {
 		Ospeed: rate,
 	}
 
-	if _, _, errno := syscall.Syscall6(
+	_, _, errno := syscall.Syscall6(
 		syscall.SYS_IOCTL,
-		uintptr(fd),
+		uintptr(f.Fd()),
 		uintptr(syscall.TCSETS),
 		uintptr(unsafe.Pointer(&t)),
 		0,
 		0,
 		0,
-	); errno != 0 {
+	)
+	if errno != 0 {
 		return nil, errno
 	}
 
-	if err = syscall.SetNonblock(int(fd), false); err != nil {
-		return
+	err = syscall.SetNonblock(int(f.Fd()), false)
+	if err != nil {
+		return nil, err
 	}
 
 	return f, nil
