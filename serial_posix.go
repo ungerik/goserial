@@ -14,11 +14,12 @@ import (
 	"io"
 	"os"
 	"syscall"
+	"time"
 	//"unsafe"
 )
 
-func openPort(name string, c *Config) (rwc io.ReadWriteCloser, err error) {
-	f, err := os.OpenFile(name, syscall.O_RDWR|syscall.O_NOCTTY|syscall.O_NONBLOCK, 0666)
+func openPort(name string, conf *Config) (rwc io.ReadWriteCloser, err error) {
+	f, err := os.OpenFile(name, syscall.O_RDWR|syscall.O_NOCTTY|syscall.O_NONBLOCK, 0660)
 	if err != nil {
 		return
 	}
@@ -40,7 +41,7 @@ func openPort(name string, c *Config) (rwc io.ReadWriteCloser, err error) {
 		return nil, err
 	}
 	var speed C.speed_t
-	switch c.Baud {
+	switch conf.Baud {
 	case 115200:
 		speed = C.B115200
 	case 57600:
@@ -54,7 +55,7 @@ func openPort(name string, c *Config) (rwc io.ReadWriteCloser, err error) {
 	case 4800:
 		speed = C.B4800
 	default:
-		return nil, fmt.Errorf("Unknown baud rate %v", c.Baud)
+		return nil, fmt.Errorf("Unknown baud rate %v", conf.Baud)
 	}
 
 	_, err = C.cfsetispeed(&st, speed)
@@ -70,18 +71,18 @@ func openPort(name string, c *Config) (rwc io.ReadWriteCloser, err error) {
 	st.c_cflag |= C.CLOCAL | C.CREAD
 
 	// Select stop bits
-	switch c.StopBits {
+	switch conf.StopBits {
 	case StopBits1:
 		st.c_cflag &^= C.CSTOPB
 	case StopBits2:
 		st.c_cflag |= C.CSTOPB
 	default:
-		panic(c.StopBits)
+		panic(conf.StopBits)
 	}
 
 	// Select character size
 	st.c_cflag &^= C.CSIZE
-	switch c.Size {
+	switch conf.Size {
 	case Byte5:
 		st.c_cflag |= C.CS5
 	case Byte6:
@@ -91,11 +92,11 @@ func openPort(name string, c *Config) (rwc io.ReadWriteCloser, err error) {
 	case Byte8:
 		st.c_cflag |= C.CS8
 	default:
-		panic(c.Size)
+		panic(conf.Size)
 	}
 
 	// Select parity mode
-	switch c.Parity {
+	switch conf.Parity {
 	case ParityNone:
 		st.c_cflag &^= C.PARENB
 	case ParityEven:
@@ -105,11 +106,11 @@ func openPort(name string, c *Config) (rwc io.ReadWriteCloser, err error) {
 		st.c_cflag |= C.PARENB
 		st.c_cflag |= C.PARODD
 	default:
-		panic(c.Parity)
+		panic(conf.Parity)
 	}
 
 	// Select CRLF translation
-	if c.CRLFTranslate {
+	if conf.CRLFTranslate {
 		st.c_iflag |= C.ICRNL
 	} else {
 		st.c_iflag &^= C.ICRNL
@@ -118,6 +119,11 @@ func openPort(name string, c *Config) (rwc io.ReadWriteCloser, err error) {
 	// Select raw mode
 	st.c_lflag &^= C.ICANON | C.ECHO | C.ECHOE | C.ISIG
 	st.c_oflag &^= C.OPOST
+
+	if conf.Timeout != 0 {
+		st.c_cc[C.VMIN] = 0
+		st.c_cc[C.VTIME] = C.cc_t(conf.Timeout / (time.Second / 10))
+	}
 
 	_, err = C.tcsetattr(fd, C.TCSANOW, &st)
 	if err != nil {
@@ -146,4 +152,21 @@ func openPort(name string, c *Config) (rwc io.ReadWriteCloser, err error) {
 	*/
 
 	return f, nil
+}
+
+func (conn *Connection) Drain() error {
+	fd := conn.ReadWriteCloser.(*os.File).Fd()
+	err := syscall.Errno(C.tcdrain(C.int(fd)))
+	if err != 0 {
+		return err
+	}
+	return nil
+
+	// var options C.struct_termios
+	// _, err := C.tcgetattr(C.int(f.Fd()), &options)
+	// if err != nil {
+	// 	return err
+	// }
+	// _, err = C.tcsetattr(C.int(f.Fd()), C.TCSAFLUSH, &options)
+	// return err
 }

@@ -1,5 +1,7 @@
 package goserial
 
+import "time"
+
 type ParityMode byte
 
 const (
@@ -51,7 +53,9 @@ type Config struct {
 	// XONFlowControl bool
 
 	CRLFTranslate bool // Ignored on Windows.
-	// TimeoutStuff int
+
+	// Timeout for the next byte, zero waits indefinitely
+	Timeout time.Duration
 }
 
 func (c *Config) check() error {

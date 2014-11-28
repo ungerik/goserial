@@ -101,16 +101,3 @@ func openPort(name string, c *Config) (rwc io.ReadWriteCloser, err error) {
 
 	return f, nil
 }
-
-// func (conn *Connection) Drain() error {
-// 	fd := conn.ReadWriteCloser.(*io.File).Fd()
-// 	err := syscall.Errno(C.tcdrain(C.int(fd)))
-
-// 	// var options C.struct_termios
-// 	// _, err := C.tcgetattr(C.int(f.Fd()), &options)
-// 	// if err != nil {
-// 	// 	return err
-// 	// }
-// 	// _, err = C.tcsetattr(C.int(f.Fd()), C.TCSAFLUSH, &options)
-// 	// return err
-// }
