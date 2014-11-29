@@ -2,13 +2,11 @@
 
 package goserial
 
-// include <Windows.h>
+// #include <Windows.h>
 import "C"
 
 import (
 	"fmt"
-	"path/filepath"
-	"strings"
 	"unsafe"
 )
 
