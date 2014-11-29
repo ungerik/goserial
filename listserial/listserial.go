@@ -26,17 +26,17 @@ func main() {
 	// fmt.Println("\n")
 
 	flag.Parse()
-	ports := goserial.ListPorts()
 	switch {
 	case *names && !*paths:
-		for _, name := range dry.StringMapGroupedNumberPostfixSortedKeys(ports) {
-			fmt.Println(name)
+		for _, short := range goserial.ListPortsShort() {
+			fmt.Println(short)
 		}
 	case !*names && *paths:
-		for _, name := range dry.StringMapGroupedNumberPostfixSortedKeys(ports) {
-			fmt.Println(ports[name])
+		for _, long := range goserial.ListPorts() {
+			fmt.Println(long)
 		}
 	case *names && *paths:
+		ports := goserial.ListPortsShortLong()
 		w := tabwriter.NewWriter(os.Stdout, 0, 4, 1, ' ', 0)
 		for _, name := range dry.StringMapGroupedNumberPostfixSortedKeys(ports) {
 			fmt.Fprintf(w, "%s\t-> %s\n", name, ports[name])

@@ -8,7 +8,7 @@ compile for windows from another platform.  Unfortunately goinstall
 does not currently let you cross compile so you will have to do it
 manually:
 
- GOOS=windows make clean install
+    GOOS=windows make clean install
 
 Currently there is very little in the way of configurability.  You can
 set the baud rate.  Then you can Read(), Write(), or Close() the
@@ -26,14 +26,14 @@ different goroutines).
 
 Example usage:
 
-  package main
+    package main
 
-  import (
+    import (
         "github.com/tarm/goserial"
         "log"
-  )
+    )
 
-  func main() {
+    func main() {
         c := &serial.Config{Name: "COM5", Baud: 115200}
         s, err := serial.OpenPort(c)
         if err != nil {
@@ -51,13 +51,15 @@ Example usage:
                 log.Fatal(err)
         }
         log.Print("%q", buf[:n])
-  }
+    }
 */
 package goserial
 
 import (
 	"errors"
 	"io"
+
+	"github.com/ungerik/go-dry"
 )
 
 var (
@@ -66,8 +68,16 @@ var (
 	ErrConfigParity   = errors.New("goserial config: bad parity")
 )
 
-func ListPorts() map[string]string {
+func ListPortsShortLong() map[string]string {
 	return listPorts()
+}
+
+func ListPorts() []string {
+	return dry.StringMapGroupedNumberPostfixSortedValues(listPorts())
+}
+
+func ListPortsShort() []string {
+	return dry.StringMapGroupedNumberPostfixSortedKeys(listPorts())
 }
 
 type Connection struct {

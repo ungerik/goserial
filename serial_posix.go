@@ -14,14 +14,14 @@ import (
 	"io"
 	"os"
 	"syscall"
-	"time"
+	// "time"
 	//"unsafe"
 )
 
 func openPort(name string, conf *Config) (rwc io.ReadWriteCloser, err error) {
-	f, err := os.OpenFile(name, syscall.O_RDWR|syscall.O_NOCTTY|syscall.O_NONBLOCK, 0660)
+	f, err := os.OpenFile(name, syscall.O_RDWR|syscall.O_NOCTTY|syscall.O_NONBLOCK, 0666)
 	if err != nil {
-		return
+		return nil, err
 	}
 
 	defer func() {
@@ -32,13 +32,14 @@ func openPort(name string, conf *Config) (rwc io.ReadWriteCloser, err error) {
 
 	fd := C.int(f.Fd())
 	if C.isatty(fd) != 1 {
-		return nil, errors.New("File is not a tty")
+		err = errors.New("File is not a tty")
+		return
 	}
 
-	var st C.struct_termios
-	_, err = C.tcgetattr(fd, &st)
+	var termios C.struct_termios
+	_, err = C.tcgetattr(fd, &termios)
 	if err != nil {
-		return nil, err
+		return
 	}
 	var speed C.speed_t
 	switch conf.Baud {
@@ -58,39 +59,39 @@ func openPort(name string, conf *Config) (rwc io.ReadWriteCloser, err error) {
 		return nil, fmt.Errorf("Unknown baud rate %v", conf.Baud)
 	}
 
-	_, err = C.cfsetispeed(&st, speed)
+	_, err = C.cfsetispeed(&termios, speed)
 	if err != nil {
-		return nil, err
+		return
 	}
-	_, err = C.cfsetospeed(&st, speed)
+	_, err = C.cfsetospeed(&termios, speed)
 	if err != nil {
-		return nil, err
+		return
 	}
 
 	// Select local mode
-	st.c_cflag |= C.CLOCAL | C.CREAD
+	termios.c_cflag |= C.CLOCAL | C.CREAD
 
 	// Select stop bits
 	switch conf.StopBits {
 	case StopBits1:
-		st.c_cflag &^= C.CSTOPB
+		termios.c_cflag &^= C.CSTOPB
 	case StopBits2:
-		st.c_cflag |= C.CSTOPB
+		termios.c_cflag |= C.CSTOPB
 	default:
 		panic(conf.StopBits)
 	}
 
 	// Select character size
-	st.c_cflag &^= C.CSIZE
+	termios.c_cflag &^= C.CSIZE
 	switch conf.Size {
 	case Byte5:
-		st.c_cflag |= C.CS5
+		termios.c_cflag |= C.CS5
 	case Byte6:
-		st.c_cflag |= C.CS6
+		termios.c_cflag |= C.CS6
 	case Byte7:
-		st.c_cflag |= C.CS7
+		termios.c_cflag |= C.CS7
 	case Byte8:
-		st.c_cflag |= C.CS8
+		termios.c_cflag |= C.CS8
 	default:
 		panic(conf.Size)
 	}
@@ -98,58 +99,50 @@ func openPort(name string, conf *Config) (rwc io.ReadWriteCloser, err error) {
 	// Select parity mode
 	switch conf.Parity {
 	case ParityNone:
-		st.c_cflag &^= C.PARENB
+		termios.c_cflag &^= C.PARENB
 	case ParityEven:
-		st.c_cflag |= C.PARENB
-		st.c_cflag &^= C.PARODD
+		termios.c_cflag |= C.PARENB
+		termios.c_cflag &^= C.PARODD
 	case ParityOdd:
-		st.c_cflag |= C.PARENB
-		st.c_cflag |= C.PARODD
+		termios.c_cflag |= C.PARENB
+		termios.c_cflag |= C.PARODD
 	default:
 		panic(conf.Parity)
 	}
 
 	// Select CRLF translation
 	if conf.CRLFTranslate {
-		st.c_iflag |= C.ICRNL
+		termios.c_iflag |= C.ICRNL
 	} else {
-		st.c_iflag &^= C.ICRNL
+		termios.c_iflag &^= C.ICRNL
 	}
 
 	// Select raw mode
-	st.c_lflag &^= C.ICANON | C.ECHO | C.ECHOE | C.ISIG
-	st.c_oflag &^= C.OPOST
+	termios.c_lflag &^= C.ICANON | C.ECHO | C.ECHOE | C.ISIG
+	termios.c_oflag &^= C.OPOST
 
-	if conf.Timeout != 0 {
-		st.c_cc[C.VMIN] = 0
-		st.c_cc[C.VTIME] = C.cc_t(conf.Timeout / (time.Second / 10))
-	}
+	// if conf.Timeout != 0 {
+	// 	termios.c_cc[C.VMIN] = 0
+	// 	termios.c_cc[C.VTIME] = C.cc_t(conf.Timeout / (time.Second / 10))
+	// }
 
-	_, err = C.tcsetattr(fd, C.TCSANOW, &st)
+	_, err = C.tcsetattr(fd, C.TCSANOW, &termios)
 	if err != nil {
-		return nil, err
+		return
 	}
 
-	//fmt.Println("Tweaking", name)
-	r1, _, e := syscall.Syscall(syscall.SYS_FCNTL,
-		uintptr(f.Fd()),
-		uintptr(syscall.F_SETFL),
-		uintptr(0))
-	if e != 0 || r1 != 0 {
-		s := fmt.Sprint("Clearing NONBLOCK syscall error:", e, r1)
-		return nil, errors.New(s)
-	}
-
-	/*
-				r1, _, e = syscall.Syscall(syscall.SYS_IOCTL,
-			                uintptr(f.Fd()),
-			                uintptr(0x80045402), // IOSSIOSPEED
-			                uintptr(unsafe.Pointer(&baud)));
-			        if e != 0 || r1 != 0 {
-			                s := fmt.Sprint("Baudrate syscall error:", e, r1)
-		                        return nil, os.NewError(s)
-				}
-	*/
+	// flags, _, _ := syscall.Syscall(syscall.SYS_FCNTL, uintptr(f.Fd()), uintptr(syscall.F_GETFL), 0)
+	// if int(flags) == -1 {
+	// 	err = errors.New("syscall.F_GETFL failed")
+	// 	return
+	// }
+	// flags |= syscall.O_NONBLOCK
+	// flags &^= syscall.O_NONBLOCK
+	// r1, _, _ := syscall.Syscall(syscall.SYS_FCNTL, uintptr(f.Fd()), uintptr(syscall.F_SETFL), flags)
+	// if int(r1) == -1 {
+	// 	err = errors.New("syscall.F_SETFL failed")
+	// 	return
+	// }
 
 	return f, nil
 }
