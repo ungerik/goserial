@@ -66,6 +66,10 @@ var (
 	ErrConfigParity   = errors.New("goserial config: bad parity")
 )
 
+func ListPorts() map[string]string {
+	return listPorts()
+}
+
 type Connection struct {
 	io.ReadWriteCloser
 }
