@@ -20,18 +20,18 @@ func main() {
 	ports := goserial.ListPorts()
 	switch {
 	case *names && !*paths:
-		for name := range ports {
+		for _, name := range dry.StringMapSortedKeys(ports) {
 			fmt.Println(name)
 		}
 	case !*names && *paths:
-		for _, path := range ports {
-			fmt.Println(path)
+		for _, name := range dry.StringMapSortedKeys(ports) {
+			fmt.Println(ports[name])
 		}
 	case *names && *paths:
-		s := fmt.Sprint(ports)
-		s = dry.StringReplaceMulti(s, "map[", "", " ", "\n", ":", "\t-> ", "]", "")
 		w := tabwriter.NewWriter(os.Stdout, 0, 4, 1, ' ', 0)
-		fmt.Fprintln(w, s)
+		for _, name := range dry.StringMapSortedKeys(ports) {
+			fmt.Fprintf(w, "%s\t-> %s\n", name, ports[name])
+		}
 		w.Flush()
 	}
 }
