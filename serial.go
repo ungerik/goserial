@@ -57,7 +57,6 @@ package goserial
 
 import (
 	"errors"
-	"io"
 
 	"github.com/ungerik/go-dry"
 )
@@ -68,10 +67,6 @@ var (
 	ErrConfigParity   = errors.New("goserial config: bad parity")
 )
 
-func ListPortsShortLong() map[string]string {
-	return listPorts()
-}
-
 func ListPorts() []string {
 	return dry.StringMapGroupedNumberPostfixSortedValues(listPorts())
 }
@@ -80,23 +75,16 @@ func ListPortsShort() []string {
 	return dry.StringMapGroupedNumberPostfixSortedKeys(listPorts())
 }
 
-type Connection struct {
-	io.ReadWriteCloser
+func ListPortsShortLong() map[string]string {
+	return listPorts()
 }
 
 // OpenPort opens a serial port with the specified configuration
-func OpenPort(c *Config) (conn *Connection, err error) {
+func OpenPort(c *Config) (*Connection, error) {
 	if err := c.check(); err != nil {
 		return nil, err
 	}
-
-	var connection Connection
-	connection.ReadWriteCloser, err = openPort(c.Name, c)
-	if err != nil {
-		return nil, err
-	}
-
-	return &connection, nil
+	return openPort(c.Name, c)
 }
 
 // func Flush()

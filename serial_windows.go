@@ -11,7 +11,7 @@ import (
 	"unsafe"
 )
 
-type serialPort struct {
+type Connection struct {
 	f  *os.File
 	fd syscall.Handle
 	rl sync.Mutex
@@ -37,20 +37,20 @@ type structTimeouts struct {
 	WriteTotalTimeoutConstant   uint32
 }
 
-func openPort(name string, c *Config) (rwc io.ReadWriteCloser, err error) {
+func openPort(name string, c *Config) (conn *Connection, err error) {
 	if len(name) > 0 && name[0] != '\\' {
 		name = "\\\\.\\" + name
 	}
 
-	h, err := syscall.CreateFile(syscall.StringToUTF16Ptr(name),
+	h, e := syscall.CreateFile(syscall.StringToUTF16Ptr(name),
 		syscall.GENERIC_READ|syscall.GENERIC_WRITE,
 		0,
 		nil,
 		syscall.OPEN_EXISTING,
 		syscall.FILE_ATTRIBUTE_NORMAL|syscall.FILE_FLAG_OVERLAPPED,
 		0)
-	if err != nil {
-		return nil, err
+	if e != nil {
+		return nil, e
 	}
 	f := os.NewFile(uintptr(h), name)
 	defer func() {
@@ -72,28 +72,30 @@ func openPort(name string, c *Config) (rwc io.ReadWriteCloser, err error) {
 		return
 	}
 
-	ro, err := newOverlapped()
-	if err != nil {
+	ro, e := newOverlapped()
+	if e != nil {
+		err = e
 		return
 	}
-	wo, err := newOverlapped()
-	if err != nil {
+	wo, e := newOverlapped()
+	if e != nil {
+		err = e
 		return
 	}
-	port := new(serialPort)
-	port.f = f
-	port.fd = h
-	port.ro = ro
-	port.wo = wo
+	conn = new(Connection)
+	conn.f = f
+	conn.fd = h
+	conn.ro = ro
+	conn.wo = wo
 
-	return port, nil
+	return conn, nil
 }
 
-func (p *serialPort) Close() error {
+func (p *Connection) Close() error {
 	return p.f.Close()
 }
 
-func (p *serialPort) Write(buf []byte) (int, error) {
+func (p *Connection) Write(buf []byte) (int, error) {
 	p.wl.Lock()
 	defer p.wl.Unlock()
 
@@ -108,7 +110,7 @@ func (p *serialPort) Write(buf []byte) (int, error) {
 	return getOverlappedResult(p.fd, p.wo)
 }
 
-func (p *serialPort) Read(buf []byte) (int, error) {
+func (p *Connection) Read(buf []byte) (int, error) {
 	if p == nil || p.f == nil {
 		return 0, fmt.Errorf("Invalid port on read %v %v", p, p.f)
 	}

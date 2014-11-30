@@ -11,15 +11,17 @@ import "C"
 import (
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"syscall"
-	// "time"
-	//"unsafe"
 )
 
-func openPort(name string, conf *Config) (rwc io.ReadWriteCloser, err error) {
-	f, err := os.OpenFile(name, syscall.O_RDWR|syscall.O_NOCTTY|syscall.O_NONBLOCK, 0666)
+type Connection struct {
+	*os.File
+}
+
+func openPort(name string, conf *Config) (conn *Connection, err error) {
+	var f *os.File
+	f, err = os.OpenFile(name, syscall.O_RDWR|syscall.O_NOCTTY|syscall.O_NONBLOCK, 0666)
 	if err != nil {
 		return nil, err
 	}
@@ -144,11 +146,11 @@ func openPort(name string, conf *Config) (rwc io.ReadWriteCloser, err error) {
 	// 	return
 	// }
 
-	return f, nil
+	return &Connection{f}, nil
 }
 
 func (conn *Connection) Drain() error {
-	fd := conn.ReadWriteCloser.(*os.File).Fd()
+	fd := conn.Fd()
 	err := syscall.Errno(C.tcdrain(C.int(fd)))
 	if err != 0 {
 		return err
