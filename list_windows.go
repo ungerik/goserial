@@ -18,8 +18,8 @@ func listPorts() map[string]string {
 	for i := 0; i < 256; i++ {
 		name := fmt.Sprintf("COM%d", i)
 		lpDeviceName := (*C.CHAR)(C.CString(name))
-		r := C.QueryDosDevice(lpDeviceName, lpTargetPath, C.DWORD(len(buffer)))
-		if r == 0 {
+		n := C.QueryDosDevice(lpDeviceName, lpTargetPath, C.DWORD(len(buffer)))
+		if n != 0 && n != C.ERROR_INSUFFICIENT_BUFFER {
 			results[name] = name
 		}
 	}
