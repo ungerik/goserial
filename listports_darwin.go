@@ -8,13 +8,13 @@ import (
 )
 
 func listPorts() map[string]string {
-	matches, err := filepath.Glob("/dev/tty.*")
+	matches, err := filepath.Glob("/dev/cu.*")
 	if err != nil {
 		panic(err)
 	}
 	results := make(map[string]string)
 	for _, path := range matches {
-		name := strings.TrimPrefix(path, "/dev/tty.")
+		name := strings.TrimPrefix(path, "/dev/cu.")
 		results[name] = path
 	}
 	return results

@@ -12,11 +12,35 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sync"
 	"syscall"
 )
 
 type Connection struct {
-	*os.File
+	file       *os.File
+	readMutex  sync.Mutex
+	writeMutex sync.Mutex
+}
+
+func (conn *Connection) Read(buf []byte) (int, error) {
+	conn.readMutex.Lock()
+	defer conn.readMutex.Unlock()
+	return conn.file.Read(buf)
+}
+
+func (conn *Connection) Write(buf []byte) (int, error) {
+	conn.writeMutex.Lock()
+	defer conn.writeMutex.Unlock()
+	return conn.file.Write(buf)
+}
+
+func (conn *Connection) Close() error {
+	return conn.file.Close()
+}
+
+func (conn *Connection) Drain() error {
+	_, err := C.tcdrain(C.int(conn.file.Fd()))
+	return err
 }
 
 func openPort(name string, conf *Config) (conn *Connection, err error) {
@@ -146,22 +170,5 @@ func openPort(name string, conf *Config) (conn *Connection, err error) {
 	// 	return
 	// }
 
-	return &Connection{f}, nil
-}
-
-func (conn *Connection) Drain() error {
-	fd := conn.Fd()
-	err := syscall.Errno(C.tcdrain(C.int(fd)))
-	if err != 0 {
-		return err
-	}
-	return nil
-
-	// var options C.struct_termios
-	// _, err := C.tcgetattr(C.int(f.Fd()), &options)
-	// if err != nil {
-	// 	return err
-	// }
-	// _, err = C.tcsetattr(C.int(f.Fd()), C.TCSAFLUSH, &options)
-	// return err
+	return &Connection{file: f}, nil
 }
