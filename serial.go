@@ -1,70 +1,46 @@
-/*
-Goserial is a simple go package to allow you to read and write from
-the serial port as a stream of bytes.
-
-It aims to have the same API on all platforms, including windows.  As
-an added bonus, the windows package does not use cgo, so you can cross
-compile for windows from another platform.  Unfortunately goinstall
-does not currently let you cross compile so you will have to do it
-manually:
-
-    GOOS=windows make clean install
-
-Currently there is very little in the way of configurability.  You can
-set the baud rate.  Then you can Read(), Write(), or Close() the
-connection.  Read() will block until at least one byte is returned.
-Write is the same.  There is currently no exposed way to set the
-timeouts, though patches are welcome.
-
-Currently ports are opened with 8 data bits, 1 stop bit, no parity, no hardware
-flow control, and no software flow control by default.  This works fine for
-many real devices and many faux serial devices including usb-to-serial
-converters and bluetooth serial ports.
-
-You may Read() and Write() simulantiously on the same connection (from
-different goroutines).
-
-Example usage:
-
-    package main
-
-    import (
-        "github.com/tarm/goserial"
-        "log"
-    )
-
-    func main() {
-        c := &serial.Config{Name: "COM5", Baud: 115200}
-        s, err := serial.OpenPort(c)
-        if err != nil {
-                log.Fatal(err)
-        }
-
-        n, err := s.Write([]byte("test"))
-        if err != nil {
-                log.Fatal(err)
-        }
-
-        buf := make([]byte, 128)
-        n, err = s.Read(buf)
-        if err != nil {
-                log.Fatal(err)
-        }
-        log.Print("%q", buf[:n])
-    }
-*/
-package goserial
+package serial
 
 import (
-	"errors"
+	"time"
 
 	"github.com/ungerik/go-dry"
 )
 
-var (
-	ErrConfigStopBits = errors.New("goserial config: bad number of stop bits")
-	ErrConfigByteSize = errors.New("goserial config: bad byte size")
-	ErrConfigParity   = errors.New("goserial config: bad parity")
+type Baud int
+
+const (
+	Baud2400   Baud = 2400
+	Baud4800   Baud = 4800
+	Baud9600   Baud = 9600
+	Baud19200  Baud = 19200
+	Baud38400  Baud = 38400
+	Baud57600  Baud = 57600
+	Baud115200 Baud = 115200
+	Baud230400 Baud = 230400
+)
+
+type ParityMode int
+
+const (
+	ParityModeNone = 0
+	ParityModeOdd  = 1
+	ParityModeEven = 2
+)
+
+type ByteSize int
+
+const (
+	ByteSize5 = 5
+	ByteSize6 = 6
+	ByteSize7 = 7
+	ByteSize8 = 8
+)
+
+type StopBits int
+
+const (
+	StopBits1 = 1
+	StopBits2 = 2
 )
 
 func ListPorts() []string {
@@ -79,17 +55,29 @@ func ListPortsShortLong() map[string]string {
 	return listPorts()
 }
 
-// OpenPort opens a serial port with the specified configuration
-func OpenPort(c *Config) (*Connection, error) {
-	if err := c.check(); err != nil {
-		return nil, err
-	}
-	return openPort(c.Name, c)
+// IsName returns if name mathes the pattern for serial ports.
+// This does not mean, that there is an actual serial port with
+// this name currently active. Use IsPort to get this information.
+func IsName(name string) bool {
+	return isName(name)
 }
 
-// func Flush()
-//  tcsetattr(fileDescriptor, TCSAFLUSH, &myNewTTYoptions);
+// IsPort returns if port is one of the long or short names that
+// ListPort returns.
+func IsPort(port string) bool {
+	for short, long := range ListPortsShortLong() {
+		if port == short || port == long {
+			return true
+		}
+	}
+	return false
+}
 
-// func SendBreak()
+// OpenDefault calls Open with ByteSize8, ParityModeNone, StopBits1.
+func OpenDefault(port string, baud Baud, readTimeout time.Duration) (*Connection, error) {
+	return openPort(port, baud, ByteSize8, ParityModeNone, StopBits1, readTimeout)
+}
 
-// func RegisterBreakHandler(func())
+func Open(port string, baud Baud, byteSize ByteSize, parity ParityMode, stopBits StopBits, readTimeout time.Duration) (*Connection, error) {
+	return openPort(port, baud, byteSize, parity, stopBits, readTimeout)
+}

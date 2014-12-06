@@ -8,7 +8,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/ungerik/go-dry"
-	"github.com/ungerik/goserial"
+	. "github.com/ungerik/goserial"
 )
 
 var (
@@ -28,15 +28,15 @@ func main() {
 	flag.Parse()
 	switch {
 	case *names && !*paths:
-		for _, short := range goserial.ListPortsShort() {
+		for _, short := range ListPortsShort() {
 			fmt.Println(short)
 		}
 	case !*names && *paths:
-		for _, long := range goserial.ListPorts() {
+		for _, long := range ListPorts() {
 			fmt.Println(long)
 		}
 	case *names && *paths:
-		ports := goserial.ListPortsShortLong()
+		ports := ListPortsShortLong()
 		w := tabwriter.NewWriter(os.Stdout, 0, 4, 1, ' ', 0)
 		for _, name := range dry.StringMapGroupedNumberPostfixSortedKeys(ports) {
 			fmt.Fprintf(w, "%s\t-> %s\n", name, ports[name])

@@ -1,6 +1,6 @@
 // +build windows
 
-package goserial
+package serial
 
 // #include <Windows.h>
 import "C"
@@ -10,6 +10,8 @@ import (
 	"unsafe"
 )
 
+const PREFIX = "\\\\.\\COM"
+
 // todo http://stackoverflow.com/questions/304986/how-do-i-get-the-friendly-name-of-a-com-port-in-windows
 
 func listPorts() map[string]string {
@@ -18,7 +20,7 @@ func listPorts() map[string]string {
 	results := make(map[string]string)
 
 	for i := 0; i < 256; i++ {
-		name := fmt.Sprintf("\\\\.\\COM%d", i)
+		name := fmt.Sprintf(PREFIX+"%d", i)
 		lpDeviceName := (*C.CHAR)(C.CString(name))
 		n := C.QueryDosDevice(lpDeviceName, lpTargetPath, C.DWORD(len(buffer)))
 		if n > 0 {
@@ -27,4 +29,8 @@ func listPorts() map[string]string {
 	}
 
 	return results
+}
+
+func isName(name string) bool {
+	return strings.HasPrefix(name, PREFIX) || strings.HasPrefix(name, "COM")
 }

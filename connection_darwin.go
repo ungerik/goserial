@@ -1,26 +1,11 @@
 // +build darwin
 
-package goserial
+package serial
 
-// #cgo LDFLAGS: -framework IOKit
-// #cgo LDFLAGS: -framework CoreFoundation
-// #include <stdio.h>
-// #include <string.h>
 // #include <unistd.h>
 // #include <fcntl.h>
 // #include <sys/ioctl.h>
-// #include <errno.h>
-// #include <paths.h>
 // #include <termios.h>
-// #include <sysexits.h>
-// #include <sys/param.h>
-// #include <sys/select.h>
-// #include <sys/time.h>
-// #include <time.h>
-// #include <CoreFoundation/CoreFoundation.h> 
-// #include <IOKit/IOKitLib.h>
-// #include <IOKit/serial/IOSerialKeys.h>
-// #include <IOKit/IOBSD.h>
 import "C"
 
 import (
@@ -32,7 +17,7 @@ import (
 	"time"
 )
 
-var bauds = map[int]C.speed_t{
+var bauds = map[Baud]C.speed_t{
 	2400:   C.B2400,
 	4800:   C.B4800,
 	9600:   C.B9600,
@@ -41,6 +26,13 @@ var bauds = map[int]C.speed_t{
 	57600:  C.B57600,
 	115200: C.B115200,
 	230400: C.B230400,
+}
+
+var byteSizes = map[ByteSize]C.tcflag_t{
+	ByteSize5: C.CS5,
+	ByteSize6: C.CS6,
+	ByteSize7: C.CS7,
+	ByteSize8: C.CS8,
 }
 
 type Connection struct {
@@ -72,9 +64,9 @@ func (conn *Connection) Drain() error {
 }
 
 // See https://developer.apple.com/library/mac/documentation/DeviceDrivers/Conceptual/WorkingWSerial/WWSerial_SerialDevs/SerialDevices.html
-func openPort(name string, conf *Config) (conn *Connection, err error) {
-	conn = new(Connection)
-	conn.file, err = os.OpenFile(name, syscall.O_RDWR|syscall.O_NOCTTY|syscall.O_NONBLOCK, 0666)
+func openPort(name string, baud Baud, byteSize ByteSize, parity ParityMode, stopBits StopBits, readTimeout time.Duration) (conn *Connection, err error) {
+	var file *os.File
+	file, err = os.OpenFile(name, syscall.O_RDWR|syscall.O_NOCTTY|syscall.O_NONBLOCK, 0666)
 	if err != nil {
 		return nil, err
 	}
@@ -82,12 +74,11 @@ func openPort(name string, conf *Config) (conn *Connection, err error) {
 	defer func() {
 		if err != nil {
 			fmt.Println("DEBUG: Error in openPort(), closing file.")
-			conn.file.Close()
-			conn = nil
+			file.Close()
 		}
 	}()
 
-	fd := C.int(conn.file.Fd())
+	fd := C.int(file.Fd())
 
 	if C.isatty(fd) != 1 {
 		err = errors.New("File is not a tty")
@@ -136,11 +127,11 @@ func openPort(name string, conf *Config) (conn *Connection, err error) {
 
 	// See http://www.unixwiz.net/techtips/termios-vmin-vtime.html
 	termios.c_cc[C.VMIN] = 0
-	termios.c_cc[C.VTIME] = C.cc_t(conf.Timeout / (time.Second / 10))
+	termios.c_cc[C.VTIME] = C.cc_t(readTimeout / (time.Second / 10))
 
-	speed, ok := bauds[conf.Baud]
+	speed, ok := bauds[baud]
 	if !ok {
-		err = fmt.Errorf("Unknown baud rate %d", conf.Baud)
+		err = fmt.Errorf("Unknown baud rate %d", baud)
 		return
 	}
 	r, err = C.cfsetispeed(&termios, speed)
@@ -157,50 +148,37 @@ func openPort(name string, conf *Config) (conn *Connection, err error) {
 	// Select local mode
 	termios.c_cflag |= C.CLOCAL | C.CREAD
 
-	// Select stop bits
-	switch conf.StopBits {
+	switch stopBits {
 	case StopBits1:
 		termios.c_cflag &^= C.CSTOPB
 	case StopBits2:
 		termios.c_cflag |= C.CSTOPB
 	default:
-		panic(conf.StopBits)
+		err = fmt.Errorf("Bad number of stop bits: %d", stopBits)
+		return
 	}
 
-	// Select character size
-	termios.c_cflag &^= C.CSIZE
-	switch conf.Size {
-	case Byte5:
-		termios.c_cflag |= C.CS5
-	case Byte6:
-		termios.c_cflag |= C.CS6
-	case Byte7:
-		termios.c_cflag |= C.CS7
-	case Byte8:
-		termios.c_cflag |= C.CS8
-	default:
-		panic(conf.Size)
+	size, ok := byteSizes[byteSize]
+	if !ok {
+		err = fmt.Errorf("Bad byte size: %d", byteSize)
+		return
 	}
+	termios.c_cflag &^= C.CSIZE
+	termios.c_cflag |= size
 
 	// Select parity mode
-	switch conf.Parity {
-	case ParityNone:
+	switch parity {
+	case ParityModeNone:
 		termios.c_cflag &^= C.PARENB
-	case ParityEven:
+	case ParityModeEven:
 		termios.c_cflag |= C.PARENB
 		termios.c_cflag &^= C.PARODD
-	case ParityOdd:
+	case ParityModeOdd:
 		termios.c_cflag |= C.PARENB
 		termios.c_cflag |= C.PARODD
 	default:
-		panic(conf.Parity)
-	}
-
-	// Select CRLF translation
-	if conf.CRLFTranslate {
-		termios.c_iflag |= C.ICRNL
-	} else {
-		termios.c_iflag &^= C.ICRNL
+		err = errors.New("goserial config: bad parity")
+		return
 	}
 
 	r, err = C.tcsetattr(fd, C.TCSANOW, &termios)
@@ -209,5 +187,5 @@ func openPort(name string, conf *Config) (conn *Connection, err error) {
 		return
 	}
 
-	return conn, nil
+	return &Connection{file: file}, nil
 }

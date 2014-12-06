@@ -1,6 +1,6 @@
 // +build linux,!cgo
 
-package goserial
+package serial
 
 // import (
 // 	"fmt"

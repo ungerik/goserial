@@ -1,6 +1,6 @@
 // +build windows
 
-package goserial
+package serial
 
 import "C"
 

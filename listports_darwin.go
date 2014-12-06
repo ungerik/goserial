@@ -1,26 +1,12 @@
 // +build darwin
 
-package goserial
+package serial
 
 // #cgo LDFLAGS: -framework IOKit
 // #cgo LDFLAGS: -framework CoreFoundation
-// #include <stdio.h>
-// #include <string.h>
-// #include <unistd.h>
-// #include <fcntl.h>
-// #include <sys/ioctl.h>
-// #include <errno.h>
-// #include <paths.h>
-// #include <termios.h>
-// #include <sysexits.h>
-// #include <sys/param.h>
-// #include <sys/select.h>
-// #include <sys/time.h>
-// #include <time.h>
 // #include <CoreFoundation/CoreFoundation.h> 
 // #include <IOKit/IOKitLib.h>
 // #include <IOKit/serial/IOSerialKeys.h>
-// #include <IOKit/IOBSD.h>
 import "C"
 
 import (
@@ -29,6 +15,8 @@ import (
 	"strings"
 	"unsafe"
 )
+
+const PREFIX = "/dev/cu."
 
 var (
 	kIOSerialBSDTypeKey   = C.CFStringCreateWithCStringNoCopy(nil, C.CString(C.kIOSerialBSDTypeKey), C.kCFStringEncodingASCII, nil)
@@ -83,7 +71,7 @@ func listPorts() map[string]string {
 
 			if result != 0 {
 				path := C.GoString(&deviceFilePath[0])
-				name := strings.TrimPrefix(path, "/dev/cu.")
+				name := strings.TrimPrefix(path, PREFIX)
 				results[name] = path
 			}
 		}
@@ -101,8 +89,12 @@ func listPorts() map[string]string {
 // 	}
 // 	results := make(map[string]string)
 // 	for _, path := range matches {
-// 		name := strings.TrimPrefix(path, "/dev/cu.")
+// 		name := strings.TrimPrefix(path, PREFIX)
 // 		results[name] = path
 // 	}
 // 	return results
 // }
+
+func isName(name string) bool {
+	return strings.HasPrefix(name, PREFIX)
+}
