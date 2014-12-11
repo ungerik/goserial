@@ -1,4 +1,4 @@
-// +build darwin
+// +build linux
 
 package serial
 
@@ -66,7 +66,7 @@ func (conn *Connection) Drain() error {
 // See https://developer.apple.com/library/mac/documentation/DeviceDrivers/Conceptual/WorkingWSerial/WWSerial_SerialDevs/SerialDevices.html
 func openPort(name string, baud Baud, byteSize ByteSize, parity ParityMode, stopBits StopBits, readTimeout time.Duration) (conn *Connection, err error) {
 	var file *os.File
-	file, err = os.OpenFile(name, syscall.O_RDWR|syscall.O_NOCTTY|syscall.O_NONBLOCK, 0666)
+	file, err = os.OpenFile(name, syscall.O_RDWR|syscall.O_NOCTTY|syscall.O_NONBLOCK, 0660)
 	if err != nil {
 		return nil, err
 	}
@@ -85,15 +85,15 @@ func openPort(name string, baud Baud, byteSize ByteSize, parity ParityMode, stop
 		return
 	}
 
-	// Note that open() follows POSIX semantics: multiple open() calls to
-	// the same file will succeed unless the TIOCEXCL ioctl is issued.
-	// This will prevent additional opens except by root-owned processes.
-	// See tty(4) ("man 4 tty") and ioctl(2) ("man 2 ioctl") for details.
-	r0, _, errno := syscall.Syscall(syscall.SYS_IOCTL, uintptr(fd), C.TIOCEXCL, 0)
-	if r0 != 0 {
-		err = fmt.Errorf("Error setting TIOCEXCL: %s", errno)
-		return
-	}
+	// // Note that open() follows POSIX semantics: multiple open() calls to
+	// // the same file will succeed unless the TIOCEXCL ioctl is issued.
+	// // This will prevent additional opens except by root-owned processes.
+	// // See tty(4) ("man 4 tty") and ioctl(2) ("man 2 ioctl") for details.
+	// r0, _, errno := syscall.Syscall(syscall.SYS_IOCTL, uintptr(fd), C.TIOCEXCL, 0)
+	// if r0 != 0 {
+	// 	err = fmt.Errorf("Error setting TIOCEXCL: %s", errno)
+	// 	return
+	// }
 
 	// Clear the O_NONBLOCK flag so subsequent I/O will block
 	// See fcntl(2) ("man 2 fcntl") for details.
@@ -124,10 +124,19 @@ func openPort(name string, baud Baud, byteSize ByteSize, parity ParityMode, stop
 	// See tcsetattr(4) ("man 4 tcsetattr") for details.
 	termios := origTermiosSettings
 
-	// Sets the terminal to something like the "raw" mode of the old Version 7 terminal driver:
-	// input is available character by character, echoing is disabled,
-	// and all special processing of terminal input and output characters is disabled.
-	C.cfmakeraw(&termios)
+	// // Sets the terminal to something like the "raw" mode of the old Version 7 terminal driver:
+	// // input is available character by character, echoing is disabled,
+	// // and all special processing of terminal input and output characters is disabled.
+	// C.cfmakeraw(&termios)
+
+	// IGNPAR: ignore bytes with parity errors
+	termios.c_iflag = C.IGNPAR
+
+	// Raw output
+	termios.c_oflag = 0
+
+	// ICANON: enable canonical input disable all echo functionality, and don't send signals to calling program
+	termios.c_lflag = C.ICANON
 
 	// See http://www.unixwiz.net/techtips/termios-vmin-vtime.html
 	termios.c_cc[C.VMIN] = 0
@@ -182,6 +191,12 @@ func openPort(name string, baud Baud, byteSize ByteSize, parity ParityMode, stop
 		termios.c_cflag |= C.PARODD
 	default:
 		err = errors.New("goserial config: bad parity")
+		return
+	}
+
+	r, err = C.tcflush(fd, C.TCIFLUSH)
+	if r != 0 {
+		err = fmt.Errorf("Error flushing connection: %s", err)
 		return
 	}
 
