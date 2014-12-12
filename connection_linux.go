@@ -112,12 +112,6 @@ func openPort(name string, baud Baud, byteSize ByteSize, parity ParityMode, stop
 		return
 	}
 
-	r, err := C.tcflush(fd, C.TCIOFLUSH)
-	if r != 0 {
-		err = fmt.Errorf("Error flushing connection: %s", err)
-		return
-	}
-
 	// Get the current options and save them so we can restore the
 	// default settings later.
 	var r C.int
@@ -137,32 +131,33 @@ func openPort(name string, baud Baud, byteSize ByteSize, parity ParityMode, stop
 	// cause the changes to take effect. Note that the
 	// changes will not take effect without the tcsetattr() call.
 	// See tcsetattr(4) ("man 4 tcsetattr") for details.
-	termios := origTermiosSettings
+	// termios := origTermiosSettings
+
+	var termios C.struct_termios
+
+	// IGNPAR: ignore bytes with parity errors
+	termios.c_iflag = C.IGNPAR
+
+	// Select local mode
+	termios.c_cflag = C.CLOCAL | C.CREAD
 
 	// // Sets the terminal to something like the "raw" mode of the old Version 7 terminal driver:
 	// // input is available character by character, echoing is disabled,
 	// // and all special processing of terminal input and output characters is disabled.
 	// C.cfmakeraw(&termios)
 
-	// IGNPAR: ignore bytes with parity errors
-	termios.c_iflag = C.IGNPAR
-
 	// // Turn off all fancy termios tricks, give us a raw channel
-	// data.term.c_iflag &^= (IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL | IMAXBEL)
-	// data.term.c_lflag &^= (ISIG | ICANON | ECHO | IEXTEN)
-	// data.term.c_lflag &^= (ICANON | ECHO | ECHOE | ECHOK | ECHONL | ISIG | IEXTEN)
-
-	// Raw output
-	termios.c_oflag = 0
-	// ~(OPOST)
-
-	// ICANON: enable canonical input disable all echo functionality, and don't send signals to calling program
-	// termios.c_lflag = C.ICANON
-	termios.c_lflag = 0
+	// termios.c_iflag &^= (C.IGNBRK | C.BRKINT | C.PARMRK | C.ISTRIP | C.INLCR | C.IGNCR | C.ICRNL | C.IMAXBEL)
+	// termios.c_lflag &^= (C.ISIG | C.ICANON | C.ECHO | C.IEXTEN)
+	// termios.c_lflag &^= (C.ICANON | C.ECHO | C.ECHOE | C.ECHOK | C.ECHONL | C.ISIG | C.IEXTEN)
 
 	// // Select raw mode
 	// termios.c_lflag &^= C.ICANON | C.ECHO | C.ECHOE | C.ISIG
-	// termios.c_oflag &^= C.OPOST	
+	// termios.c_oflag &^= C.OPOST
+
+	// // Disable flow control
+	// termios.c_cflag &^= C.CRTSCTS
+	// termios.c_iflag &^= (C.IXON | C.IXOFF | C.IXANY)
 
 	// See http://www.unixwiz.net/techtips/termios-vmin-vtime.html
 	termios.c_cc[C.VMIN] = 0
@@ -183,13 +178,6 @@ func openPort(name string, baud Baud, byteSize ByteSize, parity ParityMode, stop
 		err = fmt.Errorf("Error setting output speed: %d (%s)", speed, err)
 		return
 	}
-
-	// Select local mode
-	termios.c_cflag |= C.CLOCAL | C.CREAD
-
-	// Disable flow control
-	termios.c_cflag &^= C.CRTSCTS
-	termios.c_iflag &^= (C.IXON | C.IXOFF | C.IXANY)
 
 	switch stopBits {
 	case StopBits1:
@@ -221,6 +209,12 @@ func openPort(name string, baud Baud, byteSize ByteSize, parity ParityMode, stop
 		termios.c_cflag |= C.PARODD
 	default:
 		err = errors.New("goserial config: bad parity")
+		return
+	}
+
+	r, err = C.tcflush(fd, C.TCIOFLUSH)
+	if r != 0 {
+		err = fmt.Errorf("Error flushing connection: %s", err)
 		return
 	}
 
