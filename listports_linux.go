@@ -12,6 +12,7 @@ import (
 
 const PREFIX = "/dev/tty"
 
+// https://github.com/wjwwood/serial/blob/master/src/impl/list_ports/list_ports_linux.cc
 func listPorts() map[string]string {
 	results := make(map[string]string)
 	if dry.FileExists("/dev/serial/by-id/") {

@@ -63,7 +63,9 @@ func (conn *Connection) Drain() error {
 	return err
 }
 
-// See https://developer.apple.com/library/mac/documentation/DeviceDrivers/Conceptual/WorkingWSerial/WWSerial_SerialDevs/SerialDevices.html
+// https://github.com/ynezz/librs232/blob/master/src/rs232_posix.c
+// http://sigrok.org/wiki/Libserialport
+
 func openPort(name string, baud Baud, byteSize ByteSize, parity ParityMode, stopBits StopBits, readTimeout time.Duration) (conn *Connection, err error) {
 	var file *os.File
 	file, err = os.OpenFile(name, syscall.O_RDWR|syscall.O_NOCTTY|syscall.O_NONBLOCK, 0660)
@@ -95,13 +97,27 @@ func openPort(name string, baud Baud, byteSize ByteSize, parity ParityMode, stop
 	// 	return
 	// }
 
-	// Clear the O_NONBLOCK flag so subsequent I/O will block
-	// See fcntl(2) ("man 2 fcntl") for details.
-	r0, _, errno = syscall.Syscall(syscall.SYS_FCNTL, uintptr(fd), C.F_SETFL, 0)
-	if r0 != 0 {
+	flags := C.fcntl(fd, F_GETFL)
+	flags &^= C.O_NONBLOCK
+	r, err = C.fcntl(fd, F_SETFL, flags)
+	if r != 0 {
 		err = fmt.Errorf("Error clearing O_NONBLOCK: %s", errno)
 		return
 	}
+
+	r, err = C.tcflush(fd, C.TCIOFLUSH)
+	if r != 0 {
+		err = fmt.Errorf("Error flushing connection: %s", err)
+		return
+	}
+
+	// // Clear the O_NONBLOCK flag so subsequent I/O will block
+	// // See fcntl(2) ("man 2 fcntl") for details.
+	// r0, _, errno = syscall.Syscall(syscall.SYS_FCNTL, uintptr(fd), C.F_SETFL, flags)
+	// if r0 != 0 {
+	// 	err = fmt.Errorf("Error clearing O_NONBLOCK: %s", errno)
+	// 	return
+	// }
 
 	// Get the current options and save them so we can restore the
 	// default settings later.
@@ -132,11 +148,21 @@ func openPort(name string, baud Baud, byteSize ByteSize, parity ParityMode, stop
 	// IGNPAR: ignore bytes with parity errors
 	termios.c_iflag = C.IGNPAR
 
+	// // Turn off all fancy termios tricks, give us a raw channel
+	// data.term.c_iflag &^= (IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL | IMAXBEL)
+	// data.term.c_lflag &^= (ISIG | ICANON | ECHO | IEXTEN)
+	// data.term.c_lflag &^= (ICANON | ECHO | ECHOE | ECHOK | ECHONL | ISIG | IEXTEN)
+
 	// Raw output
 	termios.c_oflag = 0
 
 	// ICANON: enable canonical input disable all echo functionality, and don't send signals to calling program
-	termios.c_lflag = C.ICANON
+	// termios.c_lflag = C.ICANON
+	termios.c_lflag = 0
+
+	// // Select raw mode
+	// termios.c_lflag &^= C.ICANON | C.ECHO | C.ECHOE | C.ISIG
+	// termios.c_oflag &^= C.OPOST	
 
 	// See http://www.unixwiz.net/techtips/termios-vmin-vtime.html
 	termios.c_cc[C.VMIN] = 0
@@ -160,6 +186,10 @@ func openPort(name string, baud Baud, byteSize ByteSize, parity ParityMode, stop
 
 	// Select local mode
 	termios.c_cflag |= C.CLOCAL | C.CREAD
+
+	// Disable flow control
+	termios.c_cflag &^= C.CRTSCTS
+	termios.c_iflag &^= (C.IXON | C.IXOFF | C.IXANY)
 
 	switch stopBits {
 	case StopBits1:
@@ -191,12 +221,6 @@ func openPort(name string, baud Baud, byteSize ByteSize, parity ParityMode, stop
 		termios.c_cflag |= C.PARODD
 	default:
 		err = errors.New("goserial config: bad parity")
-		return
-	}
-
-	r, err = C.tcflush(fd, C.TCIFLUSH)
-	if r != 0 {
-		err = fmt.Errorf("Error flushing connection: %s", err)
 		return
 	}
 
