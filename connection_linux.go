@@ -91,11 +91,11 @@ func openPort(name string, baud Baud, byteSize ByteSize, parity ParityMode, stop
 	// // the same file will succeed unless the TIOCEXCL ioctl is issued.
 	// // This will prevent additional opens except by root-owned processes.
 	// // See tty(4) ("man 4 tty") and ioctl(2) ("man 2 ioctl") for details.
-	// r0, _, errno := syscall.Syscall(syscall.SYS_IOCTL, uintptr(fd), C.TIOCEXCL, 0)
-	// if r0 != 0 {
-	// 	err = fmt.Errorf("Error setting TIOCEXCL: %s", errno)
-	// 	return
-	// }
+	r0, _, errno := syscall.Syscall(syscall.SYS_IOCTL, uintptr(fd), C.TIOCEXCL, 0)
+	if r0 != 0 {
+		err = fmt.Errorf("Error setting TIOCEXCL: %s", errno)
+		return
+	}
 
 	// Clear the O_NONBLOCK flag so subsequent I/O will block
 	flags, _, errno := syscall.Syscall(syscall.SYS_FCNTL, uintptr(fd), C.F_GETFL, 0)
@@ -106,7 +106,7 @@ func openPort(name string, baud Baud, byteSize ByteSize, parity ParityMode, stop
 
 	flags &^= C.O_NONBLOCK
 
-	r0, _, errno := syscall.Syscall(syscall.SYS_FCNTL, uintptr(fd), C.F_SETFL, flags)
+	r0, _, errno = syscall.Syscall(syscall.SYS_FCNTL, uintptr(fd), C.F_SETFL, flags)
 	if r0 != 0 {
 		err = fmt.Errorf("Error clearing O_NONBLOCK: %s", errno)
 		return
