@@ -97,27 +97,26 @@ func openPort(name string, baud Baud, byteSize ByteSize, parity ParityMode, stop
 	// 	return
 	// }
 
-	flags := C.fcntl(fd, F_GETFL)
-	flags &^= C.O_NONBLOCK
-	r, err = C.fcntl(fd, F_SETFL, flags)
-	if r != 0 {
+	// Clear the O_NONBLOCK flag so subsequent I/O will block
+	flags, _, errno := syscall.Syscall(syscall.SYS_FCNTL, uintptr(fd), C.F_GETFL, 0)
+	if errno != 0 {
 		err = fmt.Errorf("Error clearing O_NONBLOCK: %s", errno)
 		return
 	}
 
-	r, err = C.tcflush(fd, C.TCIOFLUSH)
+	flags &^= C.O_NONBLOCK
+
+	r0, _, errno := syscall.Syscall(syscall.SYS_FCNTL, uintptr(fd), C.F_SETFL, flags)
+	if r0 != 0 {
+		err = fmt.Errorf("Error clearing O_NONBLOCK: %s", errno)
+		return
+	}
+
+	r, err := C.tcflush(fd, C.TCIOFLUSH)
 	if r != 0 {
 		err = fmt.Errorf("Error flushing connection: %s", err)
 		return
 	}
-
-	// // Clear the O_NONBLOCK flag so subsequent I/O will block
-	// // See fcntl(2) ("man 2 fcntl") for details.
-	// r0, _, errno = syscall.Syscall(syscall.SYS_FCNTL, uintptr(fd), C.F_SETFL, flags)
-	// if r0 != 0 {
-	// 	err = fmt.Errorf("Error clearing O_NONBLOCK: %s", errno)
-	// 	return
-	// }
 
 	// Get the current options and save them so we can restore the
 	// default settings later.
@@ -155,6 +154,7 @@ func openPort(name string, baud Baud, byteSize ByteSize, parity ParityMode, stop
 
 	// Raw output
 	termios.c_oflag = 0
+	// ~(OPOST)
 
 	// ICANON: enable canonical input disable all echo functionality, and don't send signals to calling program
 	// termios.c_lflag = C.ICANON
