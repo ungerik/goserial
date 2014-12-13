@@ -65,10 +65,11 @@ func (conn *Connection) Drain() error {
 
 // https://github.com/ynezz/librs232/blob/master/src/rs232_posix.c
 // http://sigrok.org/wiki/Libserialport
+// https://github.com/mavlink/c_uart_interface_example/blob/master/mavlink_serial.cpp
 
 func openPort(name string, baud Baud, byteSize ByteSize, parity ParityMode, stopBits StopBits, readTimeout time.Duration) (conn *Connection, err error) {
 	var file *os.File
-	file, err = os.OpenFile(name, syscall.O_RDWR|syscall.O_NOCTTY|syscall.O_NONBLOCK, 0660)
+	file, err = os.OpenFile(name, syscall.O_RDWR|syscall.O_NOCTTY|syscall.O_NDELAY, 0660)
 	if err != nil {
 		return nil, err
 	}
@@ -87,26 +88,26 @@ func openPort(name string, baud Baud, byteSize ByteSize, parity ParityMode, stop
 		return
 	}
 
-	// // Note that open() follows POSIX semantics: multiple open() calls to
-	// // the same file will succeed unless the TIOCEXCL ioctl is issued.
-	// // This will prevent additional opens except by root-owned processes.
-	// // See tty(4) ("man 4 tty") and ioctl(2) ("man 2 ioctl") for details.
-	r0, _, errno := syscall.Syscall(syscall.SYS_IOCTL, uintptr(fd), C.TIOCEXCL, 0)
-	if r0 != 0 {
-		err = fmt.Errorf("Error setting TIOCEXCL: %s", errno)
-		return
-	}
+	// Note that open() follows POSIX semantics: multiple open() calls to
+	// the same file will succeed unless the TIOCEXCL ioctl is issued.
+	// This will prevent additional opens except by root-owned processes.
+	// See tty(4) ("man 4 tty") and ioctl(2) ("man 2 ioctl") for details.
+	// r0, _, errno := syscall.Syscall(syscall.SYS_IOCTL, uintptr(fd), C.TIOCEXCL, 0)
+	// if r0 != 0 {
+	// 	err = fmt.Errorf("Error setting TIOCEXCL: %s", errno)
+	// 	return
+	// }
 
-	// Clear the O_NONBLOCK flag so subsequent I/O will block
-	flags, _, errno := syscall.Syscall(syscall.SYS_FCNTL, uintptr(fd), C.F_GETFL, 0)
-	if errno != 0 {
-		err = fmt.Errorf("Error clearing O_NONBLOCK: %s", errno)
-		return
-	}
+	// // Clear the O_NONBLOCK flag so subsequent I/O will block
+	// flags, _, errno := syscall.Syscall(syscall.SYS_FCNTL, uintptr(fd), C.F_GETFL, 0)
+	// if errno != 0 {
+	// 	err = fmt.Errorf("Error clearing O_NONBLOCK: %s", errno)
+	// 	return
+	// }
 
-	flags &^= C.O_NONBLOCK
+	// flags &^= C.O_NONBLOCK
 
-	r0, _, errno = syscall.Syscall(syscall.SYS_FCNTL, uintptr(fd), C.F_SETFL, flags)
+	r0, _, errno := syscall.Syscall(syscall.SYS_FCNTL, uintptr(fd), C.F_SETFL, 0)
 	if r0 != 0 {
 		err = fmt.Errorf("Error clearing O_NONBLOCK: %s", errno)
 		return
@@ -131,33 +132,40 @@ func openPort(name string, baud Baud, byteSize ByteSize, parity ParityMode, stop
 	// cause the changes to take effect. Note that the
 	// changes will not take effect without the tcsetattr() call.
 	// See tcsetattr(4) ("man 4 tcsetattr") for details.
-	// termios := origTermiosSettings
+	termios := origTermiosSettings
 
-	var termios C.struct_termios
-
-	// IGNPAR: ignore bytes with parity errors
-	termios.c_iflag = C.IGNPAR
+	// Make a pre-existing termios structure into "raw" mode: character-at-a-time
+	// mode with no characters interpreted, 8-bit data path.
+	//
+	// cfmakeraw(struct termios *t)
+	// {
+	// 	t->c_iflag &= ~(IMAXBEL | IGNBRK | BRKINT | PARMRK | ISTRIP |
+	// 			INLCR | IGNCR | ICRNL | IXON);
+	// 	t->c_oflag &= ~OPOST;
+	// 	t->c_lflag &= ~(ECHO | ECHONL | ICANON | ISIG | IEXTEN);
+	// 	t->c_cflag &= ~(CSIZE | PARENB);
+	// 	t->c_cflag |= CS8;
+	// }
+	//
+	C.cfmakeraw(&termios)
 
 	// Select local mode
-	termios.c_cflag = C.CLOCAL | C.CREAD
+	// termios.c_cflag |= C.CLOCAL | C.CREAD
 
-	// // Sets the terminal to something like the "raw" mode of the old Version 7 terminal driver:
-	// // input is available character by character, echoing is disabled,
-	// // and all special processing of terminal input and output characters is disabled.
-	// C.cfmakeraw(&termios)
+	/// or
 
-	// // Turn off all fancy termios tricks, give us a raw channel
-	// termios.c_iflag &^= (C.IGNBRK | C.BRKINT | C.PARMRK | C.ISTRIP | C.INLCR | C.IGNCR | C.ICRNL | C.IMAXBEL)
-	// termios.c_lflag &^= (C.ISIG | C.ICANON | C.ECHO | C.IEXTEN)
-	// termios.c_lflag &^= (C.ICANON | C.ECHO | C.ECHOE | C.ECHOK | C.ECHONL | C.ISIG | C.IEXTEN)
+	// config.c_iflag &= ~(IGNBRK | BRKINT | ICRNL |
+	//                     INLCR | PARMRK | INPCK | ISTRIP | IXON);
 
-	// // Select raw mode
-	// termios.c_lflag &^= C.ICANON | C.ECHO | C.ECHOE | C.ISIG
-	// termios.c_oflag &^= C.OPOST
+	// config.c_oflag &= ~(OCRNL | ONLCR | ONLRET |
+	//                      ONOCR | OFILL | OPOST)
 
-	// // Disable flow control
-	// termios.c_cflag &^= C.CRTSCTS
-	// termios.c_iflag &^= (C.IXON | C.IXOFF | C.IXANY)
+	// config.c_lflag &= ~(ECHO | ECHONL | ICANON | IEXTEN | ISIG)
+
+	// config.c_cflag &= ~(CSIZE | PARENB)
+	// config.c_cflag |= CS8
+
+	/// /or
 
 	// See http://www.unixwiz.net/techtips/termios-vmin-vtime.html
 	termios.c_cc[C.VMIN] = 0
@@ -179,46 +187,40 @@ func openPort(name string, baud Baud, byteSize ByteSize, parity ParityMode, stop
 		return
 	}
 
-	switch stopBits {
-	case StopBits1:
-		termios.c_cflag &^= C.CSTOPB
-	case StopBits2:
-		termios.c_cflag |= C.CSTOPB
-	default:
-		err = fmt.Errorf("Bad number of stop bits: %d", stopBits)
-		return
-	}
+	// switch stopBits {
+	// case StopBits1:
+	// 	termios.c_cflag &^= C.CSTOPB
+	// case StopBits2:
+	// 	termios.c_cflag |= C.CSTOPB
+	// default:
+	// 	err = fmt.Errorf("Bad number of stop bits: %d", stopBits)
+	// 	return
+	// }
 
-	size, ok := byteSizes[byteSize]
-	if !ok {
-		err = fmt.Errorf("Bad byte size: %d", byteSize)
-		return
-	}
-	termios.c_cflag &^= C.CSIZE
-	termios.c_cflag |= size
+	// size, ok := byteSizes[byteSize]
+	// if !ok {
+	// 	err = fmt.Errorf("Bad byte size: %d", byteSize)
+	// 	return
+	// }
+	// termios.c_cflag &^= C.CSIZE
+	// termios.c_cflag |= size
 
-	// Select parity mode
-	switch parity {
-	case ParityModeNone:
-		termios.c_cflag &^= C.PARENB
-	case ParityModeEven:
-		termios.c_cflag |= C.PARENB
-		termios.c_cflag &^= C.PARODD
-	case ParityModeOdd:
-		termios.c_cflag |= C.PARENB
-		termios.c_cflag |= C.PARODD
-	default:
-		err = errors.New("goserial config: bad parity")
-		return
-	}
+	// // Select parity mode
+	// switch parity {
+	// case ParityModeNone:
+	// 	termios.c_cflag &^= C.PARENB
+	// case ParityModeEven:
+	// 	termios.c_cflag |= C.PARENB
+	// 	termios.c_cflag &^= C.PARODD
+	// case ParityModeOdd:
+	// 	termios.c_cflag |= C.PARENB
+	// 	termios.c_cflag |= C.PARODD
+	// default:
+	// 	err = errors.New("goserial config: bad parity")
+	// 	return
+	// }
 
-	r, err = C.tcflush(fd, C.TCIOFLUSH)
-	if r != 0 {
-		err = fmt.Errorf("Error flushing connection: %s", err)
-		return
-	}
-
-	r, err = C.tcsetattr(fd, C.TCSANOW, &termios)
+	r, err = C.tcsetattr(fd, C.TCSAFLUSH, &termios)
 	if r != 0 {
 		err = fmt.Errorf("Error setting serial options: %s", err)
 		return

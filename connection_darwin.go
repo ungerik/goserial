@@ -124,10 +124,12 @@ func openPort(name string, baud Baud, byteSize ByteSize, parity ParityMode, stop
 	// See tcsetattr(4) ("man 4 tcsetattr") for details.
 	termios := origTermiosSettings
 
-	// Sets the terminal to something like the "raw" mode of the old Version 7 terminal driver:
-	// input is available character by character, echoing is disabled,
-	// and all special processing of terminal input and output characters is disabled.
+	// Make a pre-existing termios structure into "raw" mode: character-at-a-time
+	// mode with no characters interpreted, 8-bit data path.
 	C.cfmakeraw(&termios)
+
+	// Select local mode
+	termios.c_cflag |= C.CLOCAL | C.CREAD
 
 	// See http://www.unixwiz.net/techtips/termios-vmin-vtime.html
 	termios.c_cc[C.VMIN] = 0
@@ -148,9 +150,6 @@ func openPort(name string, baud Baud, byteSize ByteSize, parity ParityMode, stop
 		err = fmt.Errorf("Error setting output speed: %d (%s)", speed, err)
 		return
 	}
-
-	// Select local mode
-	termios.c_cflag |= C.CLOCAL | C.CREAD
 
 	switch stopBits {
 	case StopBits1:
@@ -185,7 +184,7 @@ func openPort(name string, baud Baud, byteSize ByteSize, parity ParityMode, stop
 		return
 	}
 
-	r, err = C.tcsetattr(fd, C.TCSANOW, &termios)
+	r, err = C.tcsetattr(fd, C.TCSAFLUSH, &termios)
 	if r != 0 {
 		err = fmt.Errorf("Error setting serial options: %s", err)
 		return
