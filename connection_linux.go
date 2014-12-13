@@ -92,11 +92,11 @@ func openPort(name string, baud Baud, byteSize ByteSize, parity ParityMode, stop
 	// the same file will succeed unless the TIOCEXCL ioctl is issued.
 	// This will prevent additional opens except by root-owned processes.
 	// See tty(4) ("man 4 tty") and ioctl(2) ("man 2 ioctl") for details.
-	// r0, _, errno := syscall.Syscall(syscall.SYS_IOCTL, uintptr(fd), C.TIOCEXCL, 0)
-	// if r0 != 0 {
-	// 	err = fmt.Errorf("Error setting TIOCEXCL: %s", errno)
-	// 	return
-	// }
+	r0, _, errno := syscall.Syscall(syscall.SYS_IOCTL, uintptr(fd), C.TIOCEXCL, 0)
+	if r0 != 0 {
+		err = fmt.Errorf("Error setting TIOCEXCL: %s", errno)
+		return
+	}
 
 	// // Clear the O_NONBLOCK flag so subsequent I/O will block
 	// flags, _, errno := syscall.Syscall(syscall.SYS_FCNTL, uintptr(fd), C.F_GETFL, 0)
@@ -107,7 +107,7 @@ func openPort(name string, baud Baud, byteSize ByteSize, parity ParityMode, stop
 
 	// flags &^= C.O_NONBLOCK
 
-	r0, _, errno := syscall.Syscall(syscall.SYS_FCNTL, uintptr(fd), C.F_SETFL, 0)
+	r0, _, errno = syscall.Syscall(syscall.SYS_FCNTL, uintptr(fd), C.F_SETFL, 0)
 	if r0 != 0 {
 		err = fmt.Errorf("Error clearing O_NONBLOCK: %s", errno)
 		return
@@ -147,23 +147,21 @@ func openPort(name string, baud Baud, byteSize ByteSize, parity ParityMode, stop
 	// 	t->c_cflag |= CS8;
 	// }
 	//
-	C.cfmakeraw(&termios)
+	// C.cfmakeraw(&termios)
 
 	// Select local mode
 	// termios.c_cflag |= C.CLOCAL | C.CREAD
 
 	/// or
 
-	// config.c_iflag &= ~(IGNBRK | BRKINT | ICRNL |
-	//                     INLCR | PARMRK | INPCK | ISTRIP | IXON);
+	termios.c_iflag &^= (C.IGNBRK | C.BRKINT | C.ICRNL | C.INLCR | C.PARMRK | C.INPCK | C.ISTRIP | C.IXON)
 
-	// config.c_oflag &= ~(OCRNL | ONLCR | ONLRET |
-	//                      ONOCR | OFILL | OPOST)
+	termios.c_oflag &^= (C.OCRNL | C.ONLCR | C.ONLRET | C.ONOCR | C.OFILL | C.OPOST)
 
-	// config.c_lflag &= ~(ECHO | ECHONL | ICANON | IEXTEN | ISIG)
+	termios.c_lflag &^= (C.ECHO | C.ECHONL | C.ICANON | C.IEXTEN | C.ISIG)
 
-	// config.c_cflag &= ~(CSIZE | PARENB)
-	// config.c_cflag |= CS8
+	termios.c_cflag &^= (C.CSIZE | C.PARENB)
+	termios.c_cflag |= C.CS8
 
 	/// /or
 
