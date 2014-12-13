@@ -29,22 +29,23 @@ func main() {
 	flag.DurationVar(&timeout, "timeout", time.Second/10, "Read timeout per packet")
 	flag.Parse()
 
-	if port == "" && flag.NArg() == 0 {
-		ports := serial.ListPorts()
-		if len(ports) == 1 {
-			port = ports[0]
-		} else {
-			fmt.Fprintln(os.Stderr, "Call readserial -port=PORT")
-			flag.PrintDefaults()
-			fmt.Fprintln(os.Stderr, "\nAvailable as PORT are:")
-			for _, p := range ports {
-				fmt.Fprintln(os.Stderr, "  ", p)
-			}
-			return
-		}
-	}
 	if port == "" {
-		port = flag.Arg(0)
+		if flag.NArg() > 0 {
+			port = flag.Arg(0)
+		} else {
+			ports := serial.ListPorts()
+			if len(ports) == 1 {
+				port = ports[0]
+			} else {
+				fmt.Fprintln(os.Stderr, "Call with -port=PORT")
+				flag.PrintDefaults()
+				fmt.Fprintln(os.Stderr, "\nAvailable as PORT are:")
+				for _, p := range ports {
+					fmt.Fprintln(os.Stderr, "  ", p)
+				}
+				return
+			}
+		}
 	}
 
 	conn, err := serial.OpenDefault(port, serial.Baud(baud), timeout)
