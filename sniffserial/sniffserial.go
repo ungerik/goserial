@@ -30,13 +30,18 @@ func main() {
 	flag.Parse()
 
 	if port == "" && flag.NArg() == 0 {
-		fmt.Fprintln(os.Stderr, "Call readserial -port=PORT")
-		flag.PrintDefaults()
-		fmt.Fprintln(os.Stderr, "\nAvailable as PORT are:")
-		for _, p := range serial.ListPorts() {
-			fmt.Fprintln(os.Stderr, "  ", p)
+		ports := serial.ListPorts()
+		if len(ports) == 1 {
+			port = ports[0]
+		} else {
+			fmt.Fprintln(os.Stderr, "Call readserial -port=PORT")
+			flag.PrintDefaults()
+			fmt.Fprintln(os.Stderr, "\nAvailable as PORT are:")
+			for _, p := range ports {
+				fmt.Fprintln(os.Stderr, "  ", p)
+			}
+			return
 		}
-		return
 	}
 	if port == "" {
 		port = flag.Arg(0)
@@ -62,7 +67,8 @@ func main() {
 	for i := 0; i < maxBytes && !stop; i++ {
 		_, err = conn.Read(buf)
 		if err == nil {
-			log.Printf("'%s' %d", buf, buf[0])
+
+			log.Printf("%q %d", buf, buf[0])
 		} else {
 			log.Println(err)
 		}
